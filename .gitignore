@@ -1,0 +1,38 @@
+# Private challenge material (never commit)
+docs/internal/*
+
+# Environment / secrets (commit only .env.example)
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Local databases (SQLite test / dev files)
+*.db
+*.sqlite
+*.sqlite3
+
+# Docker local overrides
+docker-compose.override.yml
+compose.override.yml
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/

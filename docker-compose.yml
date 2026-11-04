@@ -1,0 +1,114 @@
+name: disruption-companion
+
+# Secrets come from .env (create it with `make env`). Missing values are not caught here
+# on purpose: the api refuses to start without a valid API_TOKEN (fail closed), and
+# postgres refuses to start without a password.
+x-database-url: &database-url "postgresql+psycopg://${POSTGRES_USER:-companion}:${POSTGRES_PASSWORD:-}@db:5432/${POSTGRES_DB:-companion}"
+
+services:
+  db:
+    image: postgres:16.4-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-companion}
+      POSTGRES_DB: ${POSTGRES_DB:-companion}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    # No published port: only services on the compose network reach the database.
+
+  migrate:
+    build:
+      context: ./api
+      target: runtime
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      # Least privilege: migrations get the database URL and nothing else.
+      DATABASE_URL: *database-url
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: ./api
+      target: runtime
+    environment:
+      API_TOKEN: ${API_TOKEN:-}
+      DATABASE_URL: *database-url
+      ENABLE_DOCS: ${ENABLE_DOCS:-false}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import sys, urllib.request as u; sys.exit(0 if u.urlopen('http://127.0.0.1:8000/health/ready', timeout=2).status == 200 else 1)"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+  mock-tools:
+    build:
+      context: ./mock-tools
+      target: runtime
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import sys, urllib.request as u; sys.exit(0 if u.urlopen('http://127.0.0.1:8001/health/live', timeout=2).status == 200 else 1)"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    # Not published: reachable only from the compose network.
+
+  fe:
+    build:
+      context: ./fe
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  # ---- development toolboxes (profile "dev", used by the Makefile) -------------------
+  # Source is bind-mounted so the TDD loop needs no rebuild.
+  tools:
+    profiles: ["dev"]
+    build:
+      context: ./api
+      target: dev
+    volumes:
+      - ./api:/app
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # Used only by `make migration` (autogenerate compares against the live database).
+      DATABASE_URL: *database-url
+
+  mock-tools-tools:
+    profiles: ["dev"]
+    build:
+      context: ./mock-tools
+      target: dev
+    volumes:
+      - ./mock-tools:/app
+
+volumes:
+  db-data:

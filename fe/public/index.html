@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Disruption Companion</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+  <!-- app.js registers components on alpine:init, so it must load before Alpine. -->
+  <script src="app.js"></script>
+  <!-- Alpine.js CSP build (no eval), vendored: see vendor/README.md -->
+  <script defer src="vendor/alpine-csp-3.14.9.min.js"></script>
+</head>
+<body>
+  <main>
+    <h1>Disruption Companion</h1>
+    <p class="lead">Your trip status and next steps will appear here.</p>
+
+    <section x-data="connection" class="status" aria-live="polite">
+      <span class="dot" x-bind:class="state"></span>
+      <span x-text="message">Checking connection…</span>
+    </section>
+  </main>
+</body>
+</html>

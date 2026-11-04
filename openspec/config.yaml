@@ -1,0 +1,81 @@
+schema: spec-driven
+
+# Stack, architecture, SOLID, testing, security and commands live in CLAUDE.md, which is
+# loaded in every session. This file holds only what is specific to OpenSpec artifacts and
+# operations, so the two never drift apart.
+context: |
+  CLAUDE.md is the project's operating guide and the source of truth for stack, architecture
+  (clean architecture + SOLID), testing (TDD, unit tests only), security (Bearer token auth,
+  zero recorded credentials, PII handling) and Makefile commands. Every artifact must conform
+  to it; a change that needs to deviate must say so explicitly in its proposal and design.
+  Business source of truth: documents under docs/. The challenge brief lives in docs/internal/,
+  which is gitignored - cite it by path and section, never copy its content into tracked files.
+  All work goes through the OpenSpec flow (explore -> propose -> apply -> archive). No feature
+  code is written outside an OpenSpec change with approved tasks.
+  Time budget is tight (max ~3 effective hours for the whole challenge): prefer the smallest
+  scope that demonstrates sound judgment.
+
+rules:
+  proposal:
+    - Reference the business record(s) in docs/ that motivate the change (path + section)
+    - State the business outcome and how it would be measured
+    - State explicitly what is in scope and out of scope
+    - List assumptions taken on the brief's ambiguities and who would be asked to confirm them
+    - Identify any high-impact action (write tools) and the control that guards it
+    - State whether the change touches the database schema and which expand/contract phase it is
+    - Keep it under 400 words
+  specs:
+    - Every requirement must trace to a business record in docs/ or to a documented assumption
+    - Write scenarios in GIVEN/WHEN/THEN using concrete data from the brief's sample payloads;
+      each scenario must be directly translatable into a unit test
+    - Cover failure and degraded paths, not only the happy path (partial data, contradictory or
+      stale sources, expired options, 409 duplicate, 503 indeterminate outcome, 422 unvalidated)
+    - Specify the classification of each decision step (deterministic, AI-assisted, agentic, human)
+    - Specify auth behavior for each endpoint (missing/invalid token -> 401)
+    - Specify which fields may be shown to the passenger and which are never exposed
+  design:
+    - Map every component to a layer (presentation, services, repositories, schemas) and show
+      that dependencies point inward
+    - Name the Protocols each service depends on and where they are wired (composition root)
+    - Justify module boundaries with SOLID; call out any deliberate deviation and why
+    - Database changes follow expand -> migrate -> contract with one Alembic revision per phase;
+      expand is additive only, contract ships in a later change; never rename or drop in the
+      same revision that introduces the replacement; every revision has a working downgrade
+      and uses batch operations so it runs on both SQLite and PostgreSQL
+    - Include a Mermaid sequence diagram for each main flow (request -> services ->
+      repositories/tools -> response), covering at least one failure path
+    - Include a Mermaid class diagram of the schemas, services, Protocols, and implementations
+      introduced or changed; omit only when the change adds no classes
+    - Define Pydantic schemas for every boundary and the HTTP contract (status codes, errors)
+    - Describe idempotency, retry, and timeout behavior for every write tool call
+    - Describe how secrets/config are injected (environment variables only) and the auth design
+    - List the OWASP API Security Top 10 (2023) / OWASP Top 10 risks the change touches and the
+      control for each; the change must not ship with an unaddressed one
+    - State the test strategy - which behaviors are covered and which fakes are used
+    - Record decisions with the alternatives discarded and why
+  tasks:
+    - TDD - for every behavior, the failing unit test task comes before the implementation task
+    - Order work by layer, inside out - schemas, services, repositories, presentation, wiring
+    - Database tasks create an Alembic revision, state its expand/migrate/contract phase, and
+      include a unit test that runs upgrade and downgrade on SQLite
+    - Include tasks to update the Makefile, docker compose, and .env.example when commands,
+      services, or config change
+    - Keep each task small enough to finish and verify in under 30 minutes
+    - Final task is verification - make check (ruff + import-linter + unit tests) and a
+      docker compose smoke check
+
+operations:
+  apply:
+    guidance:
+      - Read and follow CLAUDE.md before starting; it is the project's operating guide
+      - Work test-first - write the test, run it and confirm it fails for the expected reason,
+        then implement the minimum to pass, then refactor
+      - Implement only what the change's tasks describe; propose a change update for new scope
+      - Never edit an applied Alembic revision; add a new one
+      - Run commands through the Makefile; report test results faithfully, including failures
+      - Note AI-generated output that was accepted, modified, or rejected, for the AI Usage Note
+  archive:
+    guidance:
+      - Confirm all tasks are done and make check passes before archiving
+      - Update CLAUDE.md if the change introduced new commands, services, or conventions
+      - Summarize the archive outcome and any follow-ups or known limitations
