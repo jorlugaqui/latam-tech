@@ -35,6 +35,8 @@ def _operations(spec: dict[str, Any]) -> list[tuple[str, str, dict[str, Any]]]:
 
 
 def _expected_codes(path: str) -> set[str]:
+    if path == "/api/v1/trips/lookup":
+        return {"200", "401", "503"} | COMMON
     if path.startswith("/api/"):
         return {"200", "401"} | COMMON
     if path == "/health/ready":
@@ -81,6 +83,15 @@ def test_protected_401_uses_the_error_schema(spec: dict[str, Any]) -> None:
     ref = unauthorized["content"]["application/json"]["schema"]["$ref"]
     assert ref.endswith("/ErrorResponse")
     assert "error" in spec["components"]["schemas"]["ErrorResponse"]["properties"]
+
+
+def test_trip_lookup_is_documented(spec: dict[str, Any]) -> None:
+    operation = spec["paths"]["/api/v1/trips/lookup"]["post"]
+
+    unavailable = operation["responses"]["503"]["content"]["application/json"]["schema"]
+    assert unavailable["$ref"].endswith("/ErrorResponse")
+    ok = operation["responses"]["200"]["content"]["application/json"]["schema"]
+    assert ok["$ref"].endswith("/TripStatusResponse")
 
 
 def test_readiness_documents_both_outcomes(spec: dict[str, Any]) -> None:

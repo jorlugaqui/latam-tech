@@ -40,11 +40,28 @@ server="$(grep -i '^server:' <<<"$headers" | tr -d '\r' | cut -d' ' -f2-)"
 check "Server header without version" "nginx" "$server"
 csp="$(grep -i '^content-security-policy:' <<<"$headers")"
 check "CSP has frame-ancestors 'none'" "yes" "$(grep -q "frame-ancestors 'none'" <<<"$csp" && echo yes || echo no)"
+# The Alpine CSP build cannot evaluate x-model's assignment: inputs would never reach the
+# request. Values are read from the submitted form instead.
+check "page uses no x-model (unsupported by the Alpine CSP build)" "no" \
+  "$(curl -s "$FE/" | grep -q 'x-model' && echo yes || echo no)"
 
 echo "API through the proxy"
 check "ping without token -> 401" "401" "$(status "$FE/api/v1/ping")"
 check "ping with token -> 200" "200" "$(status -H @"$header_file" "$FE/api/v1/ping")"
 check "401 body is uniform" '{"error":"unauthorized"}' "$(curl -s "$FE/api/v1/ping")"
+
+echo "Trip lookup through the proxy (PostgreSQL rules + mock-tools)"
+lookup() { # lookup <booking> <surname> [curl args...]
+  local booking="$1" surname="$2"; shift 2
+  curl -s -H 'Content-Type: application/json' \
+    -d "{\"booking_id\":\"$booking\",\"last_name\":\"$surname\"}" "$@" "$FE/api/v1/trips/lookup"
+}
+brief="$(lookup ABC123 Silva -H @"$header_file")"
+check "ABC123/Silva -> DISRUPTIVE" "yes" "$(grep -q '"relevance":"DISRUPTIVE"' <<<"$brief" && echo yes || echo no)"
+check "ABC123/Silva uses REL-2026-09" "yes" "$(grep -q '"rules_version":"REL-2026-09"' <<<"$brief" && echo yes || echo no)"
+check "ABC123/Silva has no email" "no" "$(grep -q 'maria.silva@example.com' <<<"$brief" && echo yes || echo no)"
+check "NOTF01 -> 404" "404" "$(lookup NOTF01 Silva -H @"$header_file" -o /dev/null -w '%{http_code}')"
+check "lookup without token -> 401" "401" "$(lookup ABC123 Silva -o /dev/null -w '%{http_code}')"
 
 echo "Internal-only paths"
 check "/health/ready through fe -> 404" "404" "$(status "$FE/health/ready")"

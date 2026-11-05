@@ -21,7 +21,7 @@ All feature work goes through OpenSpec (`/opsx:explore` → `/opsx:propose` → 
 | Component | Technology |
 |---|---|
 | `api` | Python 3.12, FastAPI, Pydantic v2, httpx; managed with uv; ruff for lint and format |
-| `mock-tools` | separate FastAPI service implementing the tool contracts below, with switchable scenarios (happy path, conflicting sources, 409, 503, ...) |
+| `mock-tools` | separate FastAPI service implementing the tool contracts below; scenarios are selected by booking code (catalog in the README), timestamps are shifted to the request time, and calls need their own `TOOLS_API_TOKEN` (never the API token) |
 | `db` | PostgreSQL at runtime, SQLite in unit tests; SQLAlchemy Core (no ORM) with portable types only |
 | `migrate` | one-shot service running `alembic upgrade head` before `api` starts |
 | `fe` | static HTML + Alpine.js (vendored in the repo, no build step) served by nginx; kept minimal; holds no credentials |

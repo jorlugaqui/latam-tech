@@ -39,6 +39,7 @@ env: ## Create .env from .env.example with random secrets (never overwrites)
 	@if [ -f .env ]; then echo ".env already exists; refusing to overwrite it" >&2; exit 1; fi
 	@umask 077; sed \
 		-e "s|^API_TOKEN=.*|API_TOKEN=$$(openssl rand -hex 32)|" \
+		-e "s|^TOOLS_API_TOKEN=.*|TOOLS_API_TOKEN=$$(openssl rand -hex 32)|" \
 		-e "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$$(openssl rand -hex 24)|" \
 		.env.example > .env
 	@echo "Created .env with random secrets"

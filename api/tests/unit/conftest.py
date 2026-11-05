@@ -9,6 +9,7 @@ from companion.config import Settings
 from companion.main import create_app
 
 TEST_TOKEN = "test-token-0123456789abcdef0123456789"
+TEST_TOOLS_TOKEN = "test-tools-token-0123456789abcdef0123"
 
 
 @pytest.fixture
@@ -19,6 +20,8 @@ def make_settings(tmp_path: Path) -> Callable[..., Settings]:
         values: dict[str, object] = {
             "api_token": TEST_TOKEN,
             "database_url": f"sqlite+pysqlite:///{tmp_path / 'app.db'}",
+            "tools_base_url": "http://mock-tools:8001",
+            "tools_api_token": TEST_TOOLS_TOKEN,
         }
         values.update(overrides)
         return Settings(**values)

@@ -43,9 +43,15 @@ services:
       DATABASE_URL: *database-url
       ENABLE_DOCS: ${ENABLE_DOCS:-false}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      TOOLS_BASE_URL: ${TOOLS_BASE_URL:-http://mock-tools:8001}
+      TOOLS_API_TOKEN: ${TOOLS_API_TOKEN:-}
     depends_on:
       migrate:
         condition: service_completed_successfully
+      # Startup order only: readiness does not depend on mock-tools, because a tool
+      # outage is a degraded state the API handles, not "not ready" (design D14).
+      mock-tools:
+        condition: service_healthy
     ports:
       - "127.0.0.1:8000:8000"
     healthcheck:
@@ -63,6 +69,9 @@ services:
     build:
       context: ./mock-tools
       target: runtime
+    environment:
+      # Least privilege: its own token, not the API token (refuses to start without it).
+      TOOLS_API_TOKEN: ${TOOLS_API_TOKEN:-}
     healthcheck:
       test:
         - CMD
