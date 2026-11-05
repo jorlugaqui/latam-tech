@@ -9,6 +9,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from companion.presentation.request_id import HEADER, NO_REQUEST, request_id_var
 from companion.schemas.errors import ErrorResponse, FieldError, ValidationErrorResponse
+from companion.services.trip_status import TripContextUnavailable, TripNotFound
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,15 @@ async def _http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:
     return _json(exc.status_code, ErrorResponse(error=code), exc.headers)
 
 
+async def _trip_not_found(_: Request, __: Exception) -> JSONResponse:
+    # Same body as an unknown route: unknown booking and wrong surname are indistinguishable.
+    return _json(404, ErrorResponse(error="not_found"))
+
+
+async def _trip_context_unavailable(_: Request, __: Exception) -> JSONResponse:
+    return _json(503, ErrorResponse(error="trip_context_unavailable"))
+
+
 async def _validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
     # Only location and message: the default handler also returns "input", which would
     # echo submitted values (possibly personal data) back to the caller.
@@ -57,6 +67,8 @@ async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
 
 def install_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(Unauthorized, _unauthorized)
+    app.add_exception_handler(TripNotFound, _trip_not_found)
+    app.add_exception_handler(TripContextUnavailable, _trip_context_unavailable)
     app.add_exception_handler(StarletteHTTPException, _http_error)
     app.add_exception_handler(RequestValidationError, _validation_error)
     app.add_exception_handler(Exception, _unhandled)

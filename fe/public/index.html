@@ -14,11 +14,67 @@
 <body>
   <main>
     <h1>Disruption Companion</h1>
-    <p class="lead">Your trip status and next steps will appear here.</p>
+    <p class="lead">Check your trip status and what it means for you.</p>
 
     <section x-data="connection" class="status" aria-live="polite">
       <span class="dot" x-bind:class="state"></span>
       <span x-text="message">Checking connection…</span>
+    </section>
+
+    <section x-data="tripLookup" class="lookup">
+      <!-- No two-way binding: the Alpine CSP build cannot evaluate the model directive's
+           assignment, so values are read from the submitted form instead (app.js, submit). -->
+      <form x-ref="form" x-on:submit.prevent="submit" autocomplete="off" novalidate>
+        <label>Booking code
+          <input name="booking_id" maxlength="6" required
+                 autocapitalize="characters" spellcheck="false">
+        </label>
+        <label>Last name
+          <input name="last_name" maxlength="60" required spellcheck="false">
+        </label>
+        <button type="submit" x-bind:disabled="busy">Check my trip</button>
+      </form>
+
+      <p class="error" role="alert" x-cloak x-show="hasError" x-text="error"></p>
+
+      <article class="trip" x-cloak x-show="hasTrip" aria-live="polite">
+        <h2 x-text="trip.headline"></h2>
+        <ul class="details">
+          <template x-for="line in trip.details" x-bind:key="line">
+            <li x-text="line"></li>
+          </template>
+        </ul>
+        <p class="muted" x-text="trip.passengers"></p>
+
+        <template x-for="segment in trip.segments" x-bind:key="segment.key">
+          <div class="segment">
+            <div class="segment-head">
+              <strong x-text="segment.title"></strong>
+              <span class="badge" x-bind:class="segment.statusClass" x-text="segment.statusText"></span>
+            </div>
+            <dl>
+              <dt>Scheduled</dt><dd x-text="segment.scheduled"></dd>
+              <dt x-show="segment.hasEstimate">Now expected</dt>
+              <dd x-show="segment.hasEstimate" x-text="segment.estimated"></dd>
+              <dt x-show="segment.hasGate">Gate</dt>
+              <dd x-show="segment.hasGate" x-text="segment.gate"></dd>
+              <dt x-show="segment.hasConnection">Connection</dt>
+              <dd x-show="segment.hasConnection" x-bind:class="segment.connectionClass"
+                  x-text="segment.connection"></dd>
+            </dl>
+          </div>
+        </template>
+
+        <div class="callout" x-show="showOptions">
+          <button type="button" disabled>See my options</button>
+          <span class="muted">Coming soon: options and next steps for your trip.</span>
+        </div>
+        <!-- Unverified data never leads to options: a person takes over (agent hand-off). -->
+        <div class="callout" x-show="showAgent">
+          <button type="button" disabled>Talk to an agent</button>
+          <span class="muted">Coming soon: hand your case to an agent.</span>
+        </div>
+      </article>
     </section>
   </main>
 </body>
