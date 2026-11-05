@@ -156,7 +156,7 @@ def test_assessment_is_recorded_with_the_request_id() -> None:
 
     _service(log=log).lookup("ABC123", "Silva", "req-1")
 
-    [(booking, assessment, request_id)] = log.records
+    [(booking, assessment, request_id, _)] = log.records
     assert (booking, request_id) == ("ABC123", "req-1")
     assert assessment.relevance is Relevance.DISRUPTIVE
 

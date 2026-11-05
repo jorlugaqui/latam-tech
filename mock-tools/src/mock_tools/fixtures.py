@@ -118,6 +118,8 @@ TRIP_CONTEXTS: dict[str, dict[str, Any]] = {
         for code in ("OKAY01", "GATE01", "CONF01", "STAL01", "CANC01", "EVTERR")
     },
     "NITE01": _context("NITE01", _segments("NITE01-", ("20:25", "22:30"), ("23:50", "04:20"))),
+    # ABC123 again, whose human case creation times out (indeterminate outcome).
+    "CASERR": _context("CASERR", _segments("CASERR-", *BRIEF_ROUTE), partial=True),
 }
 
 # The brief's events, recorded at the brief's times (offsets from the reference instant).
@@ -152,6 +154,14 @@ _BRIEF_EVENTS = [
 
 EVENTS: list[dict[str, Any]] = [
     *_BRIEF_EVENTS,
+    *[
+        {
+            **e,
+            "event_id": f"E-CASERR-{e['event_id'][2:]}",
+            "segment_id": f"CASERR-{e['segment_id']}",
+        }
+        for e in _BRIEF_EVENTS
+    ],
     *_on_time("OKAY01"),
     *_on_time("GATE01"),
     _gate("E-GATE01-3", "GATE01-S1", "31", 8 * MIN),
@@ -180,3 +190,103 @@ def events_for(segment_ids: list[str]) -> dict[str, Any]:
 
 def events_unavailable(segment_ids: list[str]) -> bool:
     return any(s.split("-", 1)[0] in UNAVAILABLE_EVENTS for s in segment_ids)
+
+
+# ---- policies, options, human cases (add-recommendation-and-handoff) --------------
+
+UNAVAILABLE_CASES = {"CASERR"}
+
+# Only DELAY exists: cancellations have no policy yet (Policy/Legal to provide one).
+POLICIES: dict[str, dict[str, Any]] = {
+    "DELAY": {
+        "scenario": "DELAY",
+        "version": "POL-DELAY-2026-03",
+        "effective_from": "2026-03-01",
+        "rules": [
+            {
+                "rule_id": "R1",
+                "condition": "delay_minutes >= 180",
+                "entitlement": "REBOOK_NO_FEE",
+                "requires_human_approval": False,
+            },
+            {
+                "rule_id": "R2",
+                "condition": "delay_minutes >= 240 AND international",
+                "entitlement": "MEAL_VOUCHER",
+                "requires_human_approval": False,
+            },
+            {
+                "rule_id": "R3",
+                "condition": "missed_connection == true",
+                "entitlement": "REBOOK_NO_FEE",
+                "requires_human_approval": False,
+            },
+            {
+                "rule_id": "R4",
+                "condition": "compensation_requested == true",
+                "entitlement": "CASH_COMPENSATION",
+                "requires_human_approval": True,
+            },
+            {
+                "rule_id": "R5",
+                "condition": "group_includes_minor == true",
+                "entitlement": "PRIORITY_HANDLING",
+                "requires_human_approval": True,
+            },
+        ],
+        "_meta": {"retrieved_at": instant(), "superseded_versions": ["POL-DELAY-2025-11"]},
+    }
+}
+
+
+def _rebook(
+    option_id: str,
+    flight: str,
+    route: tuple[str, str],
+    date: str,
+    departure: str,
+    seats: int,
+    confidence: str,
+    fare: int = 0,
+) -> dict[str, Any]:
+    option: dict[str, Any] = {
+        "option_id": option_id,
+        "type": "REBOOK",
+        "flight_number": flight,
+        "origin": route[0],
+        "destination": route[1],
+        "date": date,
+        "departure": departure,
+        "fare_difference": fare,
+        "seats_available": seats,
+        "policy_ref": "POL-DELAY-2026-03",
+        "confidence": confidence,
+    }
+    if fare:
+        option["currency"] = "CLP"
+    return option
+
+
+_BRIEF_OPTIONS = [
+    _rebook("O1", "LA2412", ("LIM", "MEX"), "2026-09-16", "08:15", 4, "HIGH"),
+    _rebook("O2", "LA2450", ("LIM", "MEX"), "2026-09-15", "23:40", 1, "MEDIUM", fare=180000),
+    {"option_id": "O3", "type": "REFUND", "policy_ref": "POL-REFUND-2026-01", "confidence": "LOW"},
+]
+
+OPTIONS: dict[str, list[dict[str, Any]]] = {
+    "ABC123": _BRIEF_OPTIONS,
+    "CASERR": _BRIEF_OPTIONS,
+    "NITE01": [_rebook("O1", "LA2412", ("LIM", "MEX"), "2026-09-16", "08:15", 4, "HIGH")],
+    # Unused while cancellations have no policy; present so the agent path is the reason.
+    "CANC01": [
+        _rebook("O1", "LA530", ("SCL", "LIM"), "2026-09-15", "19:00", 6, "HIGH"),
+        _rebook("O2", "LA532", ("SCL", "LIM"), "2026-09-16", "07:30", 9, "HIGH"),
+    ],
+}
+
+
+def options_for(booking_id: str) -> dict[str, Any]:
+    return {
+        "options": OPTIONS.get(booking_id, []),
+        "_meta": {"retrieved_at": instant(), "ttl_seconds": 120},
+    }

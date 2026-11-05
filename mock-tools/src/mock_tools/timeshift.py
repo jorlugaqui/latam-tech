@@ -37,3 +37,19 @@ def shift_events(payload: dict[str, Any], now: dt.datetime) -> dict[str, Any]:
         event["recorded_at"] = _shift_instant(event["recorded_at"], delta)
     shifted["_meta"]["retrieved_at"] = now.strftime(_FORMAT)
     return shifted
+
+
+def shift_options(payload: dict[str, Any], now: dt.datetime) -> dict[str, Any]:
+    shifted = copy.deepcopy(payload)
+    days = dt.timedelta(days=(now.date() - REFERENCE.date()).days)
+    for option in shifted["options"]:
+        if "date" in option:
+            option["date"] = (dt.date.fromisoformat(option["date"]) + days).isoformat()
+    shifted["_meta"]["retrieved_at"] = now.strftime(_FORMAT)
+    return shifted
+
+
+def shift_policy(payload: dict[str, Any], now: dt.datetime) -> dict[str, Any]:
+    shifted = copy.deepcopy(payload)
+    shifted["_meta"]["retrieved_at"] = now.strftime(_FORMAT)
+    return shifted

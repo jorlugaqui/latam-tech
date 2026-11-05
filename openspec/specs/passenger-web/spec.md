@@ -1,7 +1,7 @@
 # passenger-web Specification
 
 ## Purpose
-Delivers the passenger-facing web page and gives it same-origin access to the API, with security headers and rate limiting at the edge. This change provides the shell only; trip, disruption, and recommendation views come with later changes.
+Delivers the passenger-facing web page (trip lookup, status, recommendation, and human-case views) and gives it same-origin access to the API, with security headers and rate limiting at the edge. The page only renders what the API decides.
 
 All steps in this capability are **deterministic**.
 

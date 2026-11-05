@@ -10,6 +10,7 @@ class AssessmentNotRecorded(Exception):
 
 
 class AssessmentLog(Protocol):
-    def record(self, booking_id: str, assessment: Assessment, request_id: str) -> None:
-        """Append one record; raises ``AssessmentNotRecorded``. Never stores personal data."""
+    def record(self, booking_id: str, assessment: Assessment, request_id: str) -> str:
+        """Append one record and return its id; raises ``AssessmentNotRecorded``.
+        Never stores personal data."""
         ...

@@ -28,7 +28,7 @@ def test_upgrade_to_head_then_downgrade_to_base(tmp_path: Path) -> None:
     config = _config(url)
 
     command.upgrade(config, "head")
-    assert _current_version(url) == "0004"
+    assert _current_version(url) == "0005"
 
     command.downgrade(config, "base")
     assert _current_version(url) is None

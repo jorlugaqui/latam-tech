@@ -17,7 +17,7 @@ class SqlAssessmentLog:
     def __init__(self, engine: Engine) -> None:
         self._engine = engine
 
-    def record(self, booking_id: str, assessment: Assessment, request_id: str) -> None:
+    def record(self, booking_id: str, assessment: Assessment, request_id: str) -> str:
         row = {
             "id": str(uuid.uuid4()),
             "booking_id": booking_id,
@@ -34,3 +34,4 @@ class SqlAssessmentLog:
         except SQLAlchemyError as exc:
             logger.error("cannot record assessment: %s", type(exc).__name__)
             raise AssessmentNotRecorded from exc
+        return row["id"]

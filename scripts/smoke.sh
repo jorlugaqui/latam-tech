@@ -63,6 +63,21 @@ check "ABC123/Silva has no email" "no" "$(grep -q 'maria.silva@example.com' <<<"
 check "NOTF01 -> 404" "404" "$(lookup NOTF01 Silva -H @"$header_file" -o /dev/null -w '%{http_code}')"
 check "lookup without token -> 401" "401" "$(lookup ABC123 Silva -o /dev/null -w '%{http_code}')"
 
+echo "Recommendation and human case (policy, options, case tool, human_cases)"
+post() { # post <path> <json> [curl args...]
+  local path="$1" body="$2"; shift 2
+  curl -s -H 'Content-Type: application/json' -H @"$header_file" -d "$body" "$@" "$FE/api/v1/trips/$path"
+}
+reco="$(post recommendation '{"booking_id":"ABC123","last_name":"Silva"}')"
+check "ABC123 recommendation -> PROPOSED" "yes" "$(grep -q '"status":"PROPOSED"' <<<"$reco" && echo yes || echo no)"
+check "ABC123 recommends O1 only" "yes" "$(grep -q '"option_id":"O1"' <<<"$reco" && ! grep -q '"O2"' <<<"$reco" && echo yes || echo no)"
+first="$(post human-case '{"booking_id":"ABC123","last_name":"Silva","option_id":"O1"}' -o /dev/null -w '%{http_code}')"
+check "first ABC123 case -> 201 (or 200 if one is already open)" "yes" "$([[ $first == 201 || $first == 200 ]] && echo yes || echo no)"
+check "repeat ABC123 case -> 200 (same case)" "200" "$(post human-case '{"booking_id":"ABC123","last_name":"Silva","option_id":"O1"}' -o /dev/null -w '%{http_code}')"
+caserr="$(post human-case '{"booking_id":"CASERR","last_name":"Silva","option_id":"O1"}')"
+check "CASERR case -> INDETERMINATE" "yes" "$(grep -q '"status":"INDETERMINATE"' <<<"$caserr" && echo yes || echo no)"
+check "ineligible option -> 409" "409" "$(post human-case '{"booking_id":"ABC123","last_name":"Silva","option_id":"O2"}' -o /dev/null -w '%{http_code}')"
+
 echo "Internal-only paths"
 check "/health/ready through fe -> 404" "404" "$(status "$FE/health/ready")"
 check "/docs through fe -> 404" "404" "$(status "$FE/docs")"
@@ -77,6 +92,9 @@ echo "Rate limiting (50 parallel requests)"
 codes="$(seq 50 | xargs -P 50 -I{} curl -s -o /dev/null -w '%{http_code}\n' "$FE/api/v1/ping")"
 limited=$(grep -c '^429$' <<<"$codes" || true)
 check "at least one 429" "yes" "$([[ $limited -ge 1 ]] && echo yes || echo no)"
+# Leave the limiter refilled (burst 20 at 10 r/s) so a run started right after this one
+# does not fail on 429s caused by this burst.
+sleep 2.5
 
 echo
 echo "$pass passed, $fail failed"

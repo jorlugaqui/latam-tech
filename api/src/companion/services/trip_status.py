@@ -1,32 +1,14 @@
-"""Trip status lookup (spec trip-status, design D6-D8). Deterministic orchestration.
+"""Trip status lookup (spec trip-status). Deterministic orchestration.
 
-Order matters: the booking is verified by surname before any operational data is read,
-and personal data is stripped into ``TripFacts`` before the assessment sees anything.
+Verification, recomputation and recording live in ``TripAccess`` (shared with the
+recommendation and the human hand-off); this service only shapes the passenger response.
 """
 
-import datetime as dt
-import logging
-
-from companion.ports.audit import AssessmentLog, AssessmentNotRecorded
+from companion.ports.audit import AssessmentLog
 from companion.ports.clock import Clock
-from companion.ports.rules import AirportDirectory, RuleSetRepository, RulesUnavailable
-from companion.ports.tools import (
-    BookingNotFound,
-    OperationalEventsReader,
-    ToolUnavailable,
-    TripContextReader,
-)
-from companion.schemas.assessment import (
-    AirportInfo,
-    Assessment,
-    NextStep,
-    PassengerFacts,
-    Relevance,
-    RelevanceRuleSet,
-    SegmentFacts,
-    TripFacts,
-)
-from companion.schemas.tools import OperationalEvents, TripContext
+from companion.ports.rules import AirportDirectory, RuleSetRepository
+from companion.ports.tools import OperationalEventsReader, TripContextReader
+from companion.schemas.assessment import Assessment, TripFacts
 from companion.schemas.trip_status import (
     AssessmentView,
     ConnectionView,
@@ -37,46 +19,14 @@ from companion.schemas.trip_status import (
 )
 from companion.services.assessment.explanation import ExplanationComposer
 from companion.services.assessment.solver import DisruptionSolver
-from companion.services.surname import surname_matches
+from companion.services.trip_access import (
+    NEXT_STEP,
+    TripAccess,
+    TripContextUnavailable,
+    TripNotFound,
+)
 
-logger = logging.getLogger(__name__)
-
-_NEXT_STEP = {
-    Relevance.DISRUPTIVE: NextStep.RECOMMENDATION,
-    Relevance.UNVERIFIED: NextStep.HUMAN_ASSISTANCE,
-    Relevance.INFORMATIONAL: NextStep.NONE,
-    Relevance.NONE: NextStep.NONE,
-}
-
-
-class TripNotFound(Exception):
-    """Unknown booking or surname mismatch: deliberately indistinguishable."""
-
-
-class TripContextUnavailable(Exception):
-    """The trip context tool failed; nothing can be shown."""
-
-
-def _facts(context: TripContext) -> TripFacts:
-    return TripFacts(
-        booking_id=context.booking_id,
-        passengers=[
-            PassengerFacts(first_name=(p.name.split() or [""])[0], type=p.type)
-            for p in context.passengers
-        ],
-        segments=[
-            SegmentFacts(
-                segment_id=s.segment_id,
-                flight_number=s.flight_number,
-                origin=s.origin,
-                destination=s.destination,
-                date=s.date,
-                scheduled_departure=s.scheduled_departure,
-                scheduled_arrival=s.scheduled_arrival,
-            )
-            for s in context.segments
-        ],
-    )
+__all__ = ["TripContextUnavailable", "TripNotFound", "TripStatusService"]
 
 
 def _response(
@@ -118,7 +68,7 @@ def _response(
             assessed_at=assessment.assessed_at,
         ),
         explanation=composer.compose(assessment, facts),
-        next_step=_NEXT_STEP[assessment.relevance],
+        next_step=NEXT_STEP[assessment.relevance],
     )
 
 
@@ -134,66 +84,9 @@ class TripStatusService:
         composer: ExplanationComposer,
         assessment_log: AssessmentLog,
     ) -> None:
-        self._trips = trips
-        self._events = events
-        self._rules = rules
-        self._airports = airports
-        self._clock = clock
-        self._solver = solver
+        self._access = TripAccess(trips, events, rules, airports, clock, solver, assessment_log)
         self._composer = composer
-        self._assessment_log = assessment_log
 
     def lookup(self, booking_id: str, last_name: str, request_id: str) -> TripStatusResponse:
-        now = self._clock.now()
-        try:
-            context = self._trips.get_trip_context(booking_id)
-        except BookingNotFound:
-            logger.info("trip lookup booking=%s outcome=not_found", booking_id)
-            raise TripNotFound from None
-        except ToolUnavailable:
-            logger.warning("trip lookup booking=%s outcome=trip_context_unavailable", booking_id)
-            raise TripContextUnavailable from None
-
-        if not surname_matches(last_name, [p.name for p in context.passengers]):
-            logger.info("trip lookup booking=%s outcome=not_found", booking_id)
-            raise TripNotFound
-
-        facts = _facts(context)
-        events = self._read_events(facts)
-        rules, airports = self._read_rules(facts, now)
-        assessment = self._solver.assess(facts, events, rules, airports, now)
-        logger.info(
-            "trip lookup booking=%s relevance=%s reasons=%s rules=%s rejected=%s",
-            booking_id,
-            assessment.relevance,
-            ",".join(r.code for r in assessment.reasons) or "-",
-            assessment.rules_version or "-",
-            ",".join(f"{r.event_id}:{r.reason}" for r in assessment.rejected) or "-",
-        )
-        self._record(booking_id, assessment, request_id)
-        return _response(facts, assessment, self._composer)
-
-    def _record(self, booking_id: str, assessment: Assessment, request_id: str) -> None:
-        # Audit trail (design D15). A lookup executes nothing, so a failed record is logged
-        # and the passenger still gets the answer; actions must not proceed without one.
-        try:
-            self._assessment_log.record(booking_id, assessment, request_id)
-        except AssessmentNotRecorded:
-            logger.error("assessment not recorded booking=%s", booking_id)
-
-    def _read_events(self, facts: TripFacts) -> OperationalEvents | None:
-        try:
-            return self._events.get_operational_events([s.segment_id for s in facts.segments])
-        except ToolUnavailable:
-            logger.warning("operational events unavailable booking=%s", facts.booking_id)
-            return None
-
-    def _read_rules(
-        self, facts: TripFacts, now: dt.datetime
-    ) -> tuple[RelevanceRuleSet | None, dict[str, AirportInfo]]:
-        codes = {c for s in facts.segments for c in (s.origin, s.destination) if c}
-        try:
-            return self._rules.get_effective(now), self._airports.find(codes)
-        except RulesUnavailable:
-            logger.error("relevance rules unavailable booking=%s", facts.booking_id)
-            return None, {}
+        trip = self._access.verified_assessment(booking_id, last_name, request_id)
+        return _response(trip.facts, trip.assessment, self._composer)

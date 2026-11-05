@@ -9,6 +9,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from companion.presentation.request_id import HEADER, NO_REQUEST, request_id_var
 from companion.schemas.errors import ErrorResponse, FieldError, ValidationErrorResponse
+from companion.services.handoff import HandoffUnavailable, NothingToEscalate, OptionNotEligible
 from companion.services.trip_status import TripContextUnavailable, TripNotFound
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,18 @@ async def _trip_context_unavailable(_: Request, __: Exception) -> JSONResponse:
     return _json(503, ErrorResponse(error="trip_context_unavailable"))
 
 
+async def _option_not_eligible(_: Request, __: Exception) -> JSONResponse:
+    return _json(409, ErrorResponse(error="option_not_eligible"))
+
+
+async def _nothing_to_escalate(_: Request, __: Exception) -> JSONResponse:
+    return _json(409, ErrorResponse(error="nothing_to_escalate"))
+
+
+async def _handoff_unavailable(_: Request, __: Exception) -> JSONResponse:
+    return _json(503, ErrorResponse(error="handoff_unavailable"))
+
+
 async def _validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
     # Only location and message: the default handler also returns "input", which would
     # echo submitted values (possibly personal data) back to the caller.
@@ -69,6 +82,9 @@ def install_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(Unauthorized, _unauthorized)
     app.add_exception_handler(TripNotFound, _trip_not_found)
     app.add_exception_handler(TripContextUnavailable, _trip_context_unavailable)
+    app.add_exception_handler(OptionNotEligible, _option_not_eligible)
+    app.add_exception_handler(NothingToEscalate, _nothing_to_escalate)
+    app.add_exception_handler(HandoffUnavailable, _handoff_unavailable)
     app.add_exception_handler(StarletteHTTPException, _http_error)
     app.add_exception_handler(RequestValidationError, _validation_error)
     app.add_exception_handler(Exception, _unhandled)

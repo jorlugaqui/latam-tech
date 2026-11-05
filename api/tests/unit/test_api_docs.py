@@ -37,6 +37,10 @@ def _operations(spec: dict[str, Any]) -> list[tuple[str, str, dict[str, Any]]]:
 def _expected_codes(path: str) -> set[str]:
     if path == "/api/v1/trips/lookup":
         return {"200", "401", "503"} | COMMON
+    if path == "/api/v1/trips/recommendation":
+        return {"200", "401", "503"} | COMMON
+    if path == "/api/v1/trips/human-case":
+        return {"200", "201", "202", "401", "409", "503"} | COMMON
     if path.startswith("/api/"):
         return {"200", "401"} | COMMON
     if path == "/health/ready":
