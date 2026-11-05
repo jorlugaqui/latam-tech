@@ -68,3 +68,26 @@ trip_assessments = Table(
     Column("assessed_at", DateTime(timezone=True), nullable=False),
     Column("request_id", String(64), nullable=False),
 )
+
+# Our record of each human case (design D8 of add-recommendation-and-handoff). One active
+# case per booking: ``active_booking_id`` holds the booking code while the case is
+# REQUESTED / OPEN / INDETERMINATE and is cleared on FAILED. Being UNIQUE and nullable,
+# it blocks a second active case even under concurrent requests, on SQLite and PostgreSQL.
+human_cases = Table(
+    "human_cases",
+    metadata,
+    Column("id", String(36), primary_key=True),
+    Column("booking_id", String(16), nullable=False, index=True),
+    Column("active_booking_id", String(16), nullable=True, unique=True),
+    Column("reason", String(32), nullable=False),
+    Column("status", String(16), nullable=False),
+    Column("option_id", String(16), nullable=True),
+    Column("assessment_id", String(36), nullable=False),
+    Column("evidence", JSON, nullable=False),
+    Column("case_id", String(64), nullable=True),
+    Column("queue", String(64), nullable=True),
+    Column("sla_minutes", Integer, nullable=True),
+    Column("request_id", String(64), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)

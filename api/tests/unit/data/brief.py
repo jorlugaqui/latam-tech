@@ -115,3 +115,90 @@ def facts_from(payload: dict[str, Any]):
         ],
         segments=[SegmentFacts(**s.model_dump()) for s in context.segments],
     )
+
+
+_POLICY: dict[str, Any] = {
+    "scenario": "DELAY",
+    "version": "POL-DELAY-2026-03",
+    "effective_from": "2026-03-01",
+    "rules": [
+        {
+            "rule_id": "R1",
+            "condition": "delay_minutes >= 180",
+            "entitlement": "REBOOK_NO_FEE",
+            "requires_human_approval": False,
+        },
+        {
+            "rule_id": "R2",
+            "condition": "delay_minutes >= 240 AND international",
+            "entitlement": "MEAL_VOUCHER",
+            "requires_human_approval": False,
+        },
+        {
+            "rule_id": "R3",
+            "condition": "missed_connection == true",
+            "entitlement": "REBOOK_NO_FEE",
+            "requires_human_approval": False,
+        },
+        {
+            "rule_id": "R4",
+            "condition": "compensation_requested == true",
+            "entitlement": "CASH_COMPENSATION",
+            "requires_human_approval": True,
+        },
+        {
+            "rule_id": "R5",
+            "condition": "group_includes_minor == true",
+            "entitlement": "PRIORITY_HANDLING",
+            "requires_human_approval": True,
+        },
+    ],
+    "_meta": {"retrieved_at": "2026-09-15T11:02:36Z", "superseded_versions": ["POL-DELAY-2025-11"]},
+}
+
+_OPTIONS: dict[str, Any] = {
+    "options": [
+        {
+            "option_id": "O1",
+            "type": "REBOOK",
+            "flight_number": "LA2412",
+            "origin": "LIM",
+            "destination": "MEX",
+            "date": "2026-09-16",
+            "departure": "08:15",
+            "fare_difference": 0,
+            "seats_available": 4,
+            "policy_ref": "POL-DELAY-2026-03",
+            "confidence": "HIGH",
+        },
+        {
+            "option_id": "O2",
+            "type": "REBOOK",
+            "flight_number": "LA2450",
+            "origin": "LIM",
+            "destination": "MEX",
+            "date": "2026-09-15",
+            "departure": "23:40",
+            "fare_difference": 180000,
+            "currency": "CLP",
+            "seats_available": 1,
+            "policy_ref": "POL-DELAY-2026-03",
+            "confidence": "MEDIUM",
+        },
+        {
+            "option_id": "O3",
+            "type": "REFUND",
+            "policy_ref": "POL-REFUND-2026-01",
+            "confidence": "LOW",
+        },
+    ],
+    "_meta": {"retrieved_at": "2026-09-15T11:02:35Z", "ttl_seconds": 120},
+}
+
+
+def policy_payload() -> dict[str, Any]:
+    return copy.deepcopy(_POLICY)
+
+
+def options_payload() -> dict[str, Any]:
+    return copy.deepcopy(_OPTIONS)

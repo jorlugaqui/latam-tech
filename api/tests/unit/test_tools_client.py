@@ -128,3 +128,58 @@ def test_two_hundred_events_are_accepted() -> None:
     client, _ = _client(lambda r: httpx.Response(200, json=_many_events(200)))
 
     assert len(client.get_operational_events(["S1"]).events) == 200
+
+
+# ---- policy and options reads (add-recommendation-and-handoff) --------------------
+
+from companion.ports.tools import PolicyNotFound  # noqa: E402
+from companion.schemas.tools import TripContext  # noqa: E402
+from tests.unit.data.brief import options_payload, policy_payload  # noqa: E402
+
+
+def test_policy_request_and_parsing() -> None:
+    client, seen = _client(lambda r: httpx.Response(200, json=policy_payload()))
+
+    policy = client.get_policy_rules("DELAY")
+
+    assert policy.version == "POL-DELAY-2026-03"
+    assert seen[0].url.path == "/tools/get_policy_rules"
+    assert json.loads(seen[0].content) == {"scenario": "DELAY"}
+
+
+def test_policy_not_found() -> None:
+    client, _ = _client(lambda r: httpx.Response(404, json={"error": "POLICY_NOT_FOUND"}))
+
+    with pytest.raises(PolicyNotFound):
+        client.get_policy_rules("CANCELLATION")
+
+
+def test_options_send_the_trip_context() -> None:
+    client, seen = _client(lambda r: httpx.Response(200, json=options_payload()))
+    context = TripContext.model_validate(trip_context_payload())
+
+    options = client.get_eligible_options(context)
+
+    assert [o.option_id for o in options.options] == ["O1", "O2", "O3"]
+    body = json.loads(seen[0].content)
+    assert seen[0].url.path == "/tools/get_eligible_options"
+    assert body["booking_id"] == "ABC123"
+    assert body["_meta"]["completeness"] == "PARTIAL"
+
+
+@pytest.mark.parametrize(
+    "handler",
+    [
+        lambda r: httpx.Response(503),
+        lambda r: httpx.Response(200, json={"options": "nope"}),
+        lambda r: httpx.Response(200, content=b"x" * (300 * 1024)),
+    ],
+    ids=["503", "invalid", "oversized"],
+)
+def test_policy_and_options_failures_are_unavailable(handler: Handler) -> None:
+    client, _ = _client(handler)
+
+    with pytest.raises(ToolUnavailable):
+        client.get_policy_rules("DELAY")
+    with pytest.raises(ToolUnavailable):
+        client.get_eligible_options(TripContext.model_validate(trip_context_payload()))

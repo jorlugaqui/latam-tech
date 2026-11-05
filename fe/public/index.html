@@ -66,14 +66,47 @@
         </template>
 
         <div class="callout" x-show="showOptions">
-          <button type="button" disabled>See my options</button>
-          <span class="muted">Coming soon: options and next steps for your trip.</span>
+          <button type="button" x-on:click="seeOptions" x-bind:disabled="busy">See my options</button>
         </div>
         <!-- Unverified data never leads to options: a person takes over (agent hand-off). -->
         <div class="callout" x-show="showAgent">
-          <button type="button" disabled>Talk to an agent</button>
-          <span class="muted">Coming soon: hand your case to an agent.</span>
+          <button type="button" x-on:click="talkToAgent" x-bind:disabled="busy">Talk to an agent</button>
+          <span class="muted">We're confirming your flight status.</span>
         </div>
+
+        <section class="reco" x-cloak x-show="hasReco" aria-live="polite">
+          <h3 x-text="reco.headline"></h3>
+          <ul class="details" x-show="recoProposed">
+            <template x-for="entitlement in reco.entitlements" x-bind:key="entitlement.key">
+              <li x-text="entitlement.text"></li>
+            </template>
+          </ul>
+          <ul class="details" x-show="recoNeedsAgent">
+            <template x-for="line in reco.details" x-bind:key="line">
+              <li x-text="line"></li>
+            </template>
+          </ul>
+          <template x-for="option in reco.options" x-bind:key="option.key">
+            <div class="segment">
+              <div class="segment-head">
+                <strong x-text="option.title"></strong>
+                <span x-text="option.fare"></span>
+              </div>
+              <p x-text="option.departure"></p>
+              <button type="button" x-bind:data-option="option.id" x-on:click="requestOption"
+                      x-bind:disabled="busy">Request this option</button>
+            </div>
+          </template>
+          <p class="muted" x-show="recoProposed">An agent confirms this change before it is made.</p>
+          <div class="callout" x-show="recoNeedsAgent">
+            <button type="button" x-on:click="talkToAgent" x-bind:disabled="busy">Talk to an agent</button>
+          </div>
+        </section>
+
+        <section class="case" x-cloak x-show="hasCase" aria-live="polite">
+          <h3 x-text="caseInfo.title"></h3>
+          <p x-text="caseInfo.message"></p>
+        </section>
       </article>
     </section>
   </main>

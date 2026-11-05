@@ -30,7 +30,7 @@ The Python stack is a deliberate choice for time-to-demo, even though the hiring
 
 ## Commands
 
-The Makefile is the single entry point (`make help` lists targets). Only Docker is required: tests and lint run in the `tools` compose service (profile `dev`, `api/` bind-mounted, so no rebuild per run).
+The Makefile is the single entry point (`make help` lists targets). Only Docker is required: tests and lint run in the `api-dev` and `mock-tools-dev` compose services (profile `dev`, source bind-mounted, so no rebuild per run). They are dev toolboxes, unrelated to the airline tools that `mock-tools` imitates.
 
 ```bash
 make env                 # create .env from .env.example with random secrets (never overwrites)
@@ -50,7 +50,7 @@ make smoke               # scripts/smoke.sh against the running stack (nginx hea
 
 The `test` and `lint` targets first walk the source tree inside the container. Docker Desktop on macOS briefly caches "file not found" on bind mounts, so in TDD a module created right after its test failed can otherwise stay invisible to the next run. Keep that step if you edit these targets.
 
-Python dependencies are managed with uv in `api/pyproject.toml` (lockfile `api/uv.lock`); after changing them run `uv lock` in `api/` and rebuild the `tools` image (`docker compose --profile dev build tools`).
+Python dependencies are managed with uv in `api/pyproject.toml` (lockfile `api/uv.lock`); after changing them run `uv lock` in `api/` and rebuild the `api-dev` image (`docker compose --profile dev build api-dev`).
 
 ## Architecture
 

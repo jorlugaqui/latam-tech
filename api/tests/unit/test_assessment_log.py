@@ -78,3 +78,9 @@ def test_database_error_raises(tmp_path: Path) -> None:
 
     with pytest.raises(AssessmentNotRecorded):
         SqlAssessmentLog(empty).record("ABC123", _brief(), "req-1")
+
+
+def test_record_returns_the_new_row_id(engine: Engine) -> None:
+    record_id = SqlAssessmentLog(engine).record("ABC123", _brief(), "req-1")
+
+    assert [r["id"] for r in _rows(engine)] == [record_id]

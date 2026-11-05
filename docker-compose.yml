@@ -98,8 +98,9 @@ services:
       retries: 12
 
   # ---- development toolboxes (profile "dev", used by the Makefile) -------------------
-  # Source is bind-mounted so the TDD loop needs no rebuild.
-  tools:
+  # Source is bind-mounted so the TDD loop needs no rebuild. Named *-dev so they are not
+  # confused with the airline tools that mock-tools imitates.
+  api-dev:
     profiles: ["dev"]
     build:
       context: ./api
@@ -111,7 +112,7 @@ services:
       # Used only by `make migration` (autogenerate compares against the live database).
       DATABASE_URL: *database-url
 
-  mock-tools-tools:
+  mock-tools-dev:
     profiles: ["dev"]
     build:
       context: ./mock-tools

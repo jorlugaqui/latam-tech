@@ -77,6 +77,25 @@ source_modules = ["companion.services.assessment"]
 forbidden_modules = ["companion.ports"]
 
 [[tool.importlinter.contracts]]
+name = "Policy evaluation and option selection are pure: data in, data out"
+type = "forbidden"
+source_modules = ["companion.services.policy", "companion.services.options"]
+forbidden_modules = ["companion.ports"]
+
+[[tool.importlinter.contracts]]
+name = "Read-only services never see the write port (least privilege)"
+type = "forbidden"
+source_modules = [
+    "companion.services.trip_status",
+    "companion.services.trip_access",
+    "companion.services.recommendation",
+    "companion.services.assessment",
+    "companion.services.policy",
+    "companion.services.options",
+]
+forbidden_modules = ["companion.ports.handoff"]
+
+[[tool.importlinter.contracts]]
 name = "Repositories do not depend on presentation or services"
 type = "forbidden"
 source_modules = ["companion.repositories"]

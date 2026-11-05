@@ -1,7 +1,7 @@
 # Single entry point for every project command. Only Docker is required.
 COMPOSE := docker compose
-TOOLS   := $(COMPOSE) --profile dev run --rm tools
-MOCK_TOOLS := $(COMPOSE) --profile dev run --rm mock-tools-tools
+API_DEV := $(COMPOSE) --profile dev run --rm api-dev
+MOCK_DEV := $(COMPOSE) --profile dev run --rm mock-tools-dev
 ARGS    ?=
 # Docker Desktop (macOS) briefly caches "file not found" on bind mounts, so a module created
 # right after its failing test (TDD) can stay invisible. Walking the tree refreshes it.
@@ -33,7 +33,7 @@ smoke: ## Smoke-check the running stack (headers, proxy, internal paths, rate li
 
 migration: ## Autogenerate a revision: make migration name=add_x (stack must be up)
 	@if [ -z "$(name)" ]; then echo 'usage: make migration name=<slug>' >&2; exit 1; fi
-	$(TOOLS) alembic revision --autogenerate -m "$(name)"
+	$(API_DEV) alembic revision --autogenerate -m "$(name)"
 
 env: ## Create .env from .env.example with random secrets (never overwrites)
 	@if [ -f .env ]; then echo ".env already exists; refusing to overwrite it" >&2; exit 1; fi
@@ -45,15 +45,15 @@ env: ## Create .env from .env.example with random secrets (never overwrites)
 	@echo "Created .env with random secrets"
 
 test: ## Run unit tests; pass pytest arguments with ARGS="..."
-	$(TOOLS) sh -c "$(REFRESH) && pytest $(ARGS)"
+	$(API_DEV) sh -c "$(REFRESH) && pytest $(ARGS)"
 
 lint: ## ruff (lint + format check) and import-linter layer contracts
-	$(TOOLS) sh -c "$(REFRESH) && ruff check . && ruff format --check . && lint-imports"
+	$(API_DEV) sh -c "$(REFRESH) && ruff check . && ruff format --check . && lint-imports"
 
 format: ## Format and auto-fix with ruff
-	$(TOOLS) sh -c "ruff format . && ruff check --fix ."
+	$(API_DEV) sh -c "ruff format . && ruff check --fix ."
 
 check: lint test check-mock-tools ## lint + tests (api and mock-tools)
 
 check-mock-tools: ## ruff + unit tests for the mock-tools service
-	$(MOCK_TOOLS) sh -c "find src tests -name '*.py' > /dev/null && ruff check . && ruff format --check . && pytest"
+	$(MOCK_DEV) sh -c "find src tests -name '*.py' > /dev/null && ruff check . && ruff format --check . && pytest"

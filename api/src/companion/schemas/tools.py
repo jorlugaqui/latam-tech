@@ -85,3 +85,56 @@ class EventsMeta(_Upstream):
 class OperationalEvents(_Upstream):
     events: list[OperationalEvent]
     meta: EventsMeta = Field(alias="_meta")
+
+
+# ---- get_policy_rules -------------------------------------------------------------
+
+
+class PolicyRule(_Upstream):
+    rule_id: str
+    condition: str = Field(max_length=500)
+    entitlement: str
+    requires_human_approval: bool
+
+
+class PolicyMeta(_Upstream):
+    retrieved_at: dt.datetime
+    superseded_versions: list[str] = Field(default_factory=list)
+
+
+class PolicyRules(_Upstream):
+    scenario: str
+    version: str
+    effective_from: dt.date
+    rules: list[PolicyRule]
+    meta: PolicyMeta = Field(alias="_meta")
+
+
+# ---- get_eligible_options ---------------------------------------------------------
+
+
+class EligibleOption(_Upstream):
+    """A candidate, not a decision. REFUND options carry no flight fields."""
+
+    option_id: str
+    type: str
+    policy_ref: str
+    confidence: str
+    flight_number: str | None = None
+    origin: str | None = None
+    destination: str | None = None
+    date: dt.date | None = None
+    departure: dt.time | None = None
+    fare_difference: int | None = None
+    currency: str | None = None
+    seats_available: int | None = Field(default=None, ge=0)
+
+
+class OptionsMeta(_Upstream):
+    retrieved_at: dt.datetime
+    ttl_seconds: int = Field(ge=0)
+
+
+class EligibleOptions(_Upstream):
+    options: list[EligibleOption]
+    meta: OptionsMeta = Field(alias="_meta")

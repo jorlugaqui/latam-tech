@@ -149,4 +149,4 @@ def test_request_id_reaches_the_assessment_record(
     response = api.post(URL, json=BRIEF, headers={**auth_headers, "X-Request-ID": "req-abc"})
 
     assert response.status_code == 200
-    assert [request_id for _, _, request_id in log.records] == ["req-abc"]
+    assert [record[2] for record in log.records] == ["req-abc"]
