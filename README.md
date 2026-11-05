@@ -1,75 +1,81 @@
 # Disruption Companion
 
-Helps a passenger whose flight was disrupted understand what happened and what to do next, **without asserting unverified information and without executing a high-impact action without a person's approval**. Backend/Integration track: a Python service plus a minimal page; the airline systems are mocked with the brief's contracts.
+## Problem and expected outcome
 
-## Run locally
+A passenger whose flight changed needs to know what happened and what to do next. The data is partial, sources contradict each other, a wrong answer costs money or a claim, and rebooking is a high-impact action. **Outcome:** less uncertainty and fewer avoidable call-center contacts, without ever asserting unverified data or acting without control. **Measured by:** every demo scenario reaches its expected result, no unverified fact is shown as true, every action is traceable to a recorded decision, and no case is duplicated or blindly retried.
 
-**Prerequisites:** Docker with Compose v2, `make`, `openssl`, `curl`. No Python toolchain needed.
+## Track and why
+
+**Backend/Integration.** The brief's traps (contradictory sources, time zones, R3 vs R1, seats for the party, fees, TTLs, 409/503) are integration and decision logic, so that is where depth pays off. The passenger layer is a minimal page plus a written spec ([passenger-experience.md](docs/passenger-experience.md)).
+
+## Run and try it
+
+Prerequisites: Docker with Compose v2, `make`, `openssl`, `curl`.
 
 ```bash
-make env      # .env with random secrets (never overwrites; for an older .env see below)
-make up       # db, migrate, api, mock-tools, fe; waits until healthy
-make check    # ruff + import-linter layer contracts + unit tests (api and mock-tools)
-make smoke    # the running stack end to end: headers, proxy, lookup, recommendation, cases
-make down     # stop (make clean also deletes the database volume)
+make env && make up   # .env with random secrets; db, migrate, api, mock-tools, fe
+make check            # ruff + import-linter layer contracts + unit tests
+make smoke            # the running stack end to end
 ```
 
-Page: `http://localhost:8080/`. API docs: `http://127.0.0.1:8000/docs` (when `ENABLE_DOCS=true`).
-Every `/api` call needs `Authorization: Bearer <API_TOKEN>` from `.env`. The page never handles the token: add it with a header-modifier extension **scoped to `http://localhost:8080/*`**. An older `.env` without `TOOLS_API_TOKEN` stops `api` and `mock-tools`: run `rm .env && make env`.
+Open `http://localhost:8080/` with a header-modifier extension adding `Authorization: Bearer <API_TOKEN from .env>`, scoped to `http://localhost:8080/*`. Last name **Silva**:
 
-## Demo scenarios
+| Booking | Expected |
+|---|---|
+| `ABC123` (brief sample) | Delayed 160 min, connection missed. Options: only O1 (O2 lacks seats for 2 and charges a fee; O3 refunds a non-refundable fare). Request O1 → case; again → same case |
+| `CASERR` | Same trip; case creation times out → "being registered", never retried |
+| `CONF01` | Trusted sources disagree → nothing asserted → "Talk to an agent" |
+| `CANC01` | Cancelled, no cancellation policy → "Talk to an agent" |
 
-Use the last name **Silva** (case and accents ignored). Mock timestamps shift to the request time, so data stays fresh during a demo.
+More codes (on time, gate change, overnight, stale data, tool outages, unknown booking) are in `openspec/specs/mock-tools/spec.md`.
 
-| Booking | Shows | Expected |
+## Scope
+
+**Built:** trip lookup with booking + surname; disruption assessment (source trust and freshness, UTC with airport time zones, versioned relevance rules in PostgreSQL); recommendation from versioned policy rules and filtered options; human case as the approval step, with an audit trail; mocks for the five tools used; a minimal page.
+**Not built (designed in [future-work.md](docs/future-work.md)):** `create_rebooking_request`, `notify_passenger`, automatic approval, back office, free-text questions, runtime AI.
+
+## Assumptions (and who confirms)
+
+- Relevance: delay ≥ 120 min, missed connection or cancellation is disruptive; events older than 30 min are stale; MCT 60 min (90 at MEX). → PM + Ops
+- The surname is the trailing word(s) of `name` (no surname field). → identity owner
+- Cancellations have no policy yet, so they go to a person. → Policy / Legal
+- R5 (a minor) gates only its own entitlement once auto-approval exists. → PM
+- The party is never split; records are kept indefinitely in the demo. → PM / Legal
+
+## Main decisions and discarded alternatives
+
+| Decision | Discarded |
+|---|---|
+| Trust comes from each response's `_meta`; conflicting trusted sources → `UNVERIFIED`, never a guess | Latest event wins; fixed source ranking |
+| Relevance rules and policy are versioned data; conditions parsed with a strict grammar and three-valued logic | Constants in code; `eval` of conditions |
+| Options filtered by one specification per rule, each exclusion with its reason | One `if` chain; showing every candidate |
+| v1: every action needs a person; the human case is the approval; one active case per booking, intent recorded first, unknown outcomes never retried | Automatic rebooking; trusting the tool for idempotency |
+| Every call re-verifies the surname and recomputes on the server | Trusting what the page sends |
+| No AI at runtime ([why](docs/complex-query.md#ai-in-the-product)) | LLM classification or answers |
+
+All 31 decisions with risk and control: [decisions.md](docs/decisions.md).
+
+## Deterministic, AI-assisted, agentic, human
+
+| Step | Now | Future |
 |---|---|---|
-| `ABC123` | The brief's sample: partial context, degraded source contradicting OPS_CORE, 160-min delay | `DISRUPTIVE` (missed connection). Options: only O1 (O2 lacks seats for 2 and charges a fee; O3 refunds a non-refundable fare). Request O1 → case; again → same case |
-| `CASERR` | `ABC123` whose case creation times out | Case `INDETERMINATE`: not retried, passenger told to call if no answer in 45 min |
-| `CANC01` | First flight cancelled | `DISRUPTIVE`; no cancellation policy → "Talk to an agent" |
-| `NITE01` | Delay pushes arrival past midnight | `DISRUPTIVE`: 00:30 next day misses 23:50 |
-| `CONF01` / `STAL01` / `EVTERR` | Trusted sources disagree / only stale data / events tool down | `UNVERIFIED`: nothing asserted, "Talk to an agent" |
-| `OKAY01` / `GATE01` | On time / gate change only | `NONE` / `INFORMATIONAL` |
-| `NOTF01` / `CTXERR` | Unknown booking / trip tool down | 404 (same as a wrong surname) / 503 |
+| Status, relevance, entitlements, option filtering | Deterministic | Same |
+| Explanation text | Deterministic templates citing the policy | AI-assisted rewording behind a verifier |
+| Understanding a free-text question | Not offered (buttons) | AI-assisted intent labels; low confidence → agent |
+| Tool orchestration | Fixed order, no agent | Same; a read-only agentic copilot for agents at most |
+| Opening a case | Automatic on the passenger's request | Same |
+| Approving any rebooking; R4 cash, R5 minor; unverified data; unknown write outcomes | **Human** | Rebook without fee automatic when no rule needs approval and the option is HIGH confidence; the rest stays human |
 
-## How a request flows
+A full walk-through of an ambiguous query: [complex-query.md](docs/complex-query.md).
 
-```mermaid
-flowchart LR
-    L[Lookup<br/>booking + surname] --> V{Verify surname,<br/>recompute assessment,<br/>record it}
-    V -->|DISRUPTIVE| R[See my options:<br/>policy rules + filtered options]
-    V -->|UNVERIFIED| H[Talk to an agent]
-    V -->|NONE / INFORMATIONAL| N[Status only]
-    R -->|Request this option| C[Human case<br/>= approval]
-    R -->|no policy / no option| H
-    H --> C
-    C -->|201| O[OPEN: agent confirms<br/>within SLA]
-    C -->|timeout / 5xx| I[INDETERMINATE:<br/>never retried]
-    O -.->|future| B[Approved: rebooking<br/>request + notification]
-```
+## Validation
 
-Every call re-verifies the surname and recomputes on the server; the page only renders. Sources are trusted from each response's `_meta`, conflicts are never resolved by guessing, times are computed in UTC with airport time zones, relevance rules and the policy are versioned, and every assessment and case is recorded without personal data.
+Tests written first and seen failing (320 api, 38 mock-tools) cover every spec scenario with fakes and `httpx.MockTransport`; migrations run up and down on SQLite; import-linter enforces the layers, including "read-only services never see the write port"; `make smoke` (27 checks) runs against the real PostgreSQL, nginx and mocks; the page was checked by hand in a browser.
 
-## What is automatic and what needs a person
+## Risks, limitations and next steps
 
-| Step | Demo (this version) | Future |
-|---|---|---|
-| Trip status, relevance, explanation | Automatic, deterministic | Same; an LLM may reword, behind a verifier |
-| Entitlements from the versioned policy | Automatic, deterministic (conditions parsed, never executed) | Same |
-| Filtering and ranking options | Automatic: a proposal, never executed | Same |
-| Opening a human case | Automatic on the passenger's request, deduplicated | Same |
-| Rebook at no fee (R1/R3) | **Human approves** | Automatic when no rule needs approval, the option is HIGH confidence with seats for the party and no fee, and the data is fresh |
-| Meal voucher (R2) | Human | Automatic |
-| Priority handling (R5, a minor), cash compensation (R4) | Human | Human |
-| Unverified status, cancellations without policy | Human | Human (cancellation automatic once a policy exists) |
-| Unknown outcome of a write (timeout, 5xx) | Human reconciles; never retried | Same, plus a reconciliation job |
-| Refund on a non-refundable fare, fee conflicts, splitting the party | Never offered | Never automatic |
+- **Risks:** thresholds not yet confirmed by Ops; every disruption needs an agent in v1 (works against fewer contacts until auto-approval); a case created upstream that we never learned about (`INDETERMINATE`, reconciled by hand).
+- **Limitations:** mocks instead of real systems; one shared API token, no passenger login; surname heuristic; `international` unknown (no airport countries); no integration test suite; page checked manually; local only.
+- **Next steps:** rebooking after approval and notifications, automatic approval for safe cases, back office, signed lookup tokens ([future-work.md](docs/future-work.md)).
 
-## Tests and validation
-
-Unit tests (pytest, TDD) cover every spec scenario with fakes and `httpx.MockTransport`; migrations run up and down on SQLite; import-linter enforces the layers, including "read-only services never see the write port". `make smoke` exercises the real PostgreSQL, nginx and mocks. **Known limitations:** no integration suite, the page is checked manually, a single shared API token, local only.
-
-## More
-
-- [docs/decisions.md](docs/decisions.md): every decision with its classification (deterministic, AI-assisted, agentic, human), alternatives, risk and control.
-- [docs/future-work.md](docs/future-work.md): rebooking after approval, notifications, automatic approval, back office, authentication, open questions.
-- `openspec/specs/`: the behavior contracts; `openspec/changes/archive/`: each change's proposal, design and tasks.
+AI usage and personal decisions: [ai-usage-note.md](docs/ai-usage-note.md). Behavior contracts: `openspec/specs/`.
